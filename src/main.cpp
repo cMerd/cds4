@@ -117,6 +117,14 @@ int main(void) {
   SetTargetFPS(60);
 
   ds4Controller controller;
+
+  // motors take 6 seconds to vibrate
+  // in the beginning of the program we want lights to work, since motor isn't
+  // vibrating so we change time to 6 seconds before starting
+  std::chrono::time_point motorApplyTime =
+      std::chrono::system_clock::now() - std::chrono::seconds(6);
+  bool vibrated = false;
+
   Texture2D texPs4Pad = LoadTexture("resources/ps4.png");
   Texture2D texLeftTrigger = LoadTexture("resources/left-trigger.png");
   Texture2D texRightTrigger = LoadTexture("resources/right-trigger.png");
@@ -170,7 +178,10 @@ int main(void) {
 
   button motorApplyBtn(Rectangle{965, 300, 100, 50}, {40, 40, 40, 255}, BLANK,
                        {55, 55, 55, 255}, {30, 30, 30, 255}, BLANK, 0.0f, 0.3f,
-                       [&controller, &leftMotorSlider, &rightMotorSlider]() {
+                       [&controller, &leftMotorSlider, &rightMotorSlider,
+                        &motorApplyTime, &vibrated]() {
+                         vibrated = true;
+                         motorApplyTime = std::chrono::system_clock::now();
                          controller.vibrate(
                              uint8_t(leftMotorSlider.getValue() * 255 / 100),
                              uint8_t(rightMotorSlider.getValue() * 255 / 100));
@@ -324,6 +335,11 @@ int main(void) {
       }
     }
 
+    if (vibrated and std::chrono::system_clock::now() - motorApplyTime >=
+                         std::chrono::seconds(6)) {
+      vibrated = false;
+    }
+
     DrawRectangle(750, 0, 550, 800, Color{50, 50, 50, 255});
 
     scanBtn.draw();
@@ -391,7 +407,7 @@ int main(void) {
           float brightness = 1.0f - sbPosition.y / colorPicker.height;
           selectedColor = ColorFromHSV(hue * 360.0f, saturation, brightness);
 
-          if (!rgbSwitch) {
+          if (!rgbSwitch and !vibrated) {
             try {
               controller.setColor(
                   {selectedColor.r, selectedColor.g, selectedColor.b});
@@ -493,7 +509,7 @@ int main(void) {
       break;
     }
 
-    if (rgbSwitch and controller) {
+    if (rgbSwitch and controller and !vibrated) {
 
       if (col.r < 255 && col.g == 0 && col.b == 0) {
         col.r++;
