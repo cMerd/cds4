@@ -2,6 +2,7 @@
 #include <ds4Controller.hpp>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <menu.hpp>
 #include <pwd.h>
 #include <raylib.h>
@@ -110,6 +111,7 @@ int main(void) {
   constexpr int screenWidth = 1300;
   constexpr int screenHeight = 800;
   std::string lastDetectedName = "NOT DETECTED";
+  std::vector<std::future<void>> futures;
 
   InitWindow(screenWidth, screenHeight, "CDS4");
   SetTargetFPS(60);
@@ -180,17 +182,31 @@ int main(void) {
   Color selectedColor = {0, 0, 0, 255};
   float hue = 0.0f;
   Vector2 sbPosition = {0.0f, 0.0f};
+  bool isSearching = false;
 
-  sidebar = rescan(gamepad, controller, true);
+  futures.push_back(std::async(
+      std::launch::async, [&sidebar, &gamepad, &controller, &isSearching]() {
+        isSearching = true;
+        sidebar = rescan(gamepad, controller, true);
+        isSearching = false;
+      }));
 
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(Color{69, 69, 69, 255});
 
-    if (!IsGamepadAvailable(gamepad) or
-        lastDetectedName != GetGamepadName(gamepad)) {
+    if ((!IsGamepadAvailable(gamepad) or
+         lastDetectedName != GetGamepadName(gamepad)) and
+        !isSearching) {
       gamepad = 0;
-      sidebar = rescan(gamepad, controller, true);
+      futures.push_back(
+          std::async(std::launch::async,
+                     [&sidebar, &gamepad, &controller, &isSearching]() {
+                       isSearching = true;
+                       sidebar = rescan(gamepad, controller, true);
+                       isSearching = false;
+                     }));
+
       lastDetectedName = (IsGamepadAvailable(gamepad) ? GetGamepadName(gamepad)
                                                       : "NOT DETECTED");
       if (IsGamepadAvailable(gamepad) and
@@ -292,23 +308,19 @@ int main(void) {
                                {ledCol.r, ledCol.g, ledCol.b, 255});
         } catch (...) {
         }
-      } else {
       }
 
-    } else {
-      if (lastDetectedName != "NOT DETECTED") {
-        gamepad = 0;
-        sidebar = rescan(gamepad, controller, true);
-        lastDetectedName =
-            (IsGamepadAvailable(gamepad) ? GetGamepadName(gamepad)
-                                         : "NOT DETECTED");
-        if (IsGamepadAvailable(gamepad) and
-            (strcmp(GetGamepadName(gamepad), gamepadName) == 0 or
-             strcmp(GetGamepadName(gamepad), gamepadName2) == 0)) {
-          controller.repair();
-        } else {
-          controller.reset();
-        }
+    } else if (lastDetectedName != "NOT DETECTED" and !isSearching) {
+      gamepad = 0;
+      sidebar = rescan(gamepad, controller, true);
+      lastDetectedName = (IsGamepadAvailable(gamepad) ? GetGamepadName(gamepad)
+                                                      : "NOT DETECTED");
+      if (IsGamepadAvailable(gamepad) and
+          (strcmp(GetGamepadName(gamepad), gamepadName) == 0 or
+           strcmp(GetGamepadName(gamepad), gamepadName2) == 0)) {
+        controller.repair();
+      } else {
+        controller.reset();
       }
     }
 
